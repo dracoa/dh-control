@@ -7,18 +7,21 @@ from PIL import Image
 import time
 from detection import is_ready
 from pynput.keyboard import Key, Controller as KeyboardController
+from datetime import datetime
 
 active = False
 last = time.time()
 delay = 0.5
 monitor_number = 1
-width, height = 64, 72
+width, height = 56, 56
+y = 1001
 skills = [
-    {"trigger": -1, "action": "1", "x": 626, "y": 989},
-    {"trigger": -1, "action": "2", "x": 693, "y": 989},
-    {"trigger": -1, "action": "3", "x": 759, "y": 989},
-    {"trigger": -1, "action": "4", "x": 827, "y": 989},
-    {"trigger": 1.5, "action": Button.left, "x": 895, "y": 989},
+    {"name": "s1", "trigger": -1, "action": "1", "x": 631, "y": y},
+    {"name": "s2", "trigger": -1, "action": "2", "x": 698, "y": y},
+    {"name": "s3", "trigger": -1, "action": "3", "x": 764, "y": y},
+    {"name": "s4", "trigger": -1, "action": "4", "x": 831, "y": y},
+    {"name": "s5", "trigger": 1.5, "action": Button.left, "x": 900, "y": y},
+    {"name": "s6", "trigger": 0, "action": Button.right, "x": 966, "y": y},
 ]
 mouse_ctrl = MouseController()
 keyboard_ctrl = KeyboardController()
@@ -81,6 +84,28 @@ def loop():
                             fire_when_ready(raw, skill)
 
 
+def capture():
+    global active
+    with mss.mss() as sct:
+        mon = sct.monitors[monitor_number]
+        monitor = {
+            "top": mon["top"],  # 100px from the top
+            "left": mon["left"],  # 100px from the left
+            "width": mon["width"],
+            "height": mon["height"],
+            "mon": monitor_number,
+        }
+        skill = skills[0]
+        box = (skill["x"], skill["y"], skill["x"] + width, skill["y"] + height)
+        while True:
+            if active:
+                sct_img = sct.grab(monitor)
+                raw = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+                simg = raw.crop(box)
+                simg.save('images/temp/{0}.jpg'.format(datetime.now().strftime("%Y%m%d_%H%M%S.%f")))
+                time.sleep(0.1)
+
+
 def main():
     th = threading.Thread(target=loop)
     th.start()
@@ -91,5 +116,4 @@ def main():
 if __name__ == "__main__":
     for s in skills:
         s["last_fire"] = time.time()
-        print(type(s["action"]))
     main()
