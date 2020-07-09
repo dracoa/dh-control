@@ -6,27 +6,31 @@ import mss.tools
 from PIL import Image
 import time
 from detection import is_ready
-from pynput.keyboard import Controller as KeyboardController
+from pynput.keyboard import Key, Controller as KeyboardController
 
 active = False
-monitor_number = 2
+last = time.time()
+delay = 0.5
+monitor_number = 1
 width, height = 64, 72
 skills = [
-    {"trigger": 3, "action": "1", "x": 10, "y": 210},
-    {"trigger": -1, "action": "2", "x": 190, "y": 210},
-    {"trigger": -1, "action": "3", "x": 290, "y": 210},
-    {"trigger": -1, "action": "4", "x": 390, "y": 210},
-    {"trigger": 1, "action": Button.left, "x": 490, "y": 210},
+    {"trigger": -1, "action": "1", "x": 626, "y": 989},
+    {"trigger": -1, "action": "2", "x": 693, "y": 989},
+    {"trigger": -1, "action": "3", "x": 759, "y": 989},
+    {"trigger": -1, "action": "4", "x": 827, "y": 989},
+    {"trigger": 1.5, "action": Button.left, "x": 895, "y": 989},
 ]
 mouse_ctrl = MouseController()
 keyboard_ctrl = KeyboardController()
 
 
 def on_click(x, y, button, pressed):
-    global active
+    global active, last
     if button == Button.right:
         active = pressed
-        print(active)
+        if active:
+            last = time.time()
+        print(active, last)
 
 
 def fire(skill):
@@ -35,7 +39,9 @@ def fire(skill):
     if type(action) is str:
         keyboard_ctrl.type(action)
     else:
+        keyboard_ctrl.press(Key.shift_l)
         mouse_ctrl.click(action, 1)
+        keyboard_ctrl.release(Key.shift_l)
     skill["last_fire"] = time.time()
 
 
@@ -64,14 +70,15 @@ def loop():
             "mon": monitor_number,
         }
         while True:
-            if active:
+            if active and time.time() - last > delay:
                 sct_img = sct.grab(monitor)
                 raw = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
                 for skill in skills:
-                    if skill["trigger"] > 0:
-                        fire_at_interval(skill)
-                    else:
-                        fire_when_ready(raw, skill)
+                    if skill["trigger"] != 0:
+                        if skill["trigger"] > 0:
+                            fire_at_interval(skill)
+                        else:
+                            fire_when_ready(raw, skill)
 
 
 def main():
