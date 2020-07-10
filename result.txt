@@ -1,0 +1,4 @@
+Channel 18
+
+Accuracy:  0.9132812470197678
+Epoch: 499 	Training Loss: 0.005934 	Validation Loss: 0.437603

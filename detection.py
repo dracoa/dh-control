@@ -1,6 +1,7 @@
 import onnxruntime
 import numpy as np
 from PIL import Image
+import os
 
 label = ['active', 'not_ready', 'ready']
 
@@ -11,8 +12,7 @@ def is_ready(img):
     result = is_ready_np(img)
     x = result[0][0]
     smax = np.exp(x) / sum(np.exp(x))
-    print(smax, label[np.argmax(smax)])
-    return smax[2] > 0.5
+    return label[np.argmax(smax)]
 
 
 def is_ready_np(img):
@@ -28,3 +28,8 @@ def is_ready_np(img):
     return ort_session.run(None, {ort_session.get_inputs()[0].name: img})
 
 
+for dirPath, dirNames, fileNames in os.walk("images/validation/ready/"):
+    for f in fileNames:
+        image = Image.open(os.path.join(dirPath, f))
+        if is_ready(image) != 'ready':
+            print(os.path.join(dirPath, f))

@@ -10,25 +10,31 @@ from PIL import Image
 from torch.autograd import Variable
 from torch.utils.tensorboard import SummaryWriter
 
-tb_writer = SummaryWriter(comment="dh-control")
+
+channel = 3
+epochs = 300
+
+tb_writer = SummaryWriter(comment='dh-control-c{0}-{0}'.format(channel, epochs))
 print('Start Tensorboard with "tensorboard --logdir=runs", view at http://localhost:6006/')
+
 
 
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.conv = nn.Conv2d(3, 18, kernel_size=3, stride=1, padding=1)
+        self.channel = channel
+        self.conv = nn.Conv2d(3, self.channel, kernel_size=3, stride=1, padding=1)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
         self.dropout = nn.Dropout(p=0.5)
-        self.fc1 = nn.Linear(18 * 28 * 28, 64)
-        self.fc2 = nn.Linear(64, 3)
+        self.fc1 = nn.Linear(self.channel * 28 * 28, 128)
+        self.fc2 = nn.Linear(128, 3)
 
     def forward(self, x):
         x = self.conv(x)
         x = self.pool(x)
         x = self.dropout(x)
-        x = x.view(-1, 18 * 28 * 28)
-        x = F.relu(self.fc1(x))
+        x = x.view(-1, self.channel * 28 * 28)
+        x = F.leaky_relu(self.fc1(x))
         x = self.fc2(x)
         return x
 
@@ -61,14 +67,14 @@ model.to(device)
 summary(model, (3, 56, 56))
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+optimizer = optim.Adam(model.parameters())
 
 # Find the device available to use using torch library
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Move model to the device specified above
 model.to(device)
 
-epochs = 500
+
 for epoch in range(epochs):
     train_loss = 0
     val_loss = 0
@@ -109,8 +115,35 @@ for epoch in range(epochs):
     # TODO - study mae
     train_loss = train_loss / len(train_loader.dataset)
     valid_loss = val_loss / len(val_loader.dataset)
+    accu = accuracy / len(val_loader)
     tb_writer.add_scalar("train_loss", train_loss, epoch)
     tb_writer.add_scalar("valid_loss", valid_loss, epoch)
+    tb_writer.add_scalar("accuracy", accu, epoch)
     # Print out the information
-    print('Accuracy: ', accuracy / len(val_loader))
+    print('Accuracy: ', accu)
     print('Epoch: {} \tTraining Loss: {:.6f} \tValidation Loss: {:.6f}'.format(epoch, train_loss, valid_loss))
+
+
+def image_loader(image_name):
+    """load image, returns cuda tensor"""
+    image = Image.open(image_name)
+    image = transformationsV(image).float()
+    image = Variable(image, requires_grad=True)
+    return image.cuda()  # assumes that you're using GPU
+
+
+image = image_loader("images/validation/active/20200710_003825.819551.jpg")
+image = image[np.newaxis, :]
+predit = model(image)
+print(predit)
+
+torch.onnx.export(model,  # model being run
+                  image,  # model input (or a tuple for multiple inputs)
+                  "skill.onnx",  # where to save the model (can be a file or file-like object)
+                  export_params=True,  # store the trained parameter weights inside the model file
+                  opset_version=10,  # the ONNX version to export the model to
+                  do_constant_folding=True,  # whether to execute constant folding for optimization
+                  input_names=['input'],  # the model's input names
+                  output_names=['output'],  # the model's output names
+                  dynamic_axes={'input': {0: 'batch_size'},  # variable lenght axes
+                                'output': {0: 'batch_size'}})
