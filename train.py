@@ -8,6 +8,10 @@ import torch.optim as optim
 import numpy as np
 from PIL import Image
 from torch.autograd import Variable
+from torch.utils.tensorboard import SummaryWriter
+
+tb_writer = SummaryWriter(comment="dh-control")
+print('Start Tensorboard with "tensorboard --logdir=runs", view at http://localhost:6006/')
 
 
 class Net(nn.Module):
@@ -64,7 +68,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Move model to the device specified above
 model.to(device)
 
-epochs = 50
+epochs = 500
 for epoch in range(epochs):
     train_loss = 0
     val_loss = 0
@@ -72,25 +76,16 @@ for epoch in range(epochs):
 
     # Training the model
     model.train()
-    counter = 0
     for inputs, labels in train_loader:
-        # Move to device
-        inputs, labels = inputs.to(device), labels.to(device)
-        # Clear optimizers
-        optimizer.zero_grad()
-        # Forward pass
-        output = model.forward(inputs)
-        # Loss
-        loss = criterion(output, labels)
-        # Calculate gradients (backpropogation)
-        loss.backward()
-        # Adjust parameters based on gradients
-        optimizer.step()
-        # Add the loss to the training set's rnning loss
-        train_loss += loss.item() * inputs.size(0)
+        inputs, labels = inputs.to(device), labels.to(device)  # Move to device
+        optimizer.zero_grad()  # Clear optimizers
+        output = model.forward(inputs)  # Forward pass
+        loss = criterion(output, labels)  # Loss
+        loss.backward()  # Calculate gradients (backpropogation)
+        optimizer.step()  # Adjust parameters based on gradients
+        train_loss += loss.item() * inputs.size(0)  # Add the loss to the training set's rnning loss
 
-        # Print the progress of our training
-        counter += 1
+    # TODO - save model
 
     # Evaluating the model
     model.eval()
@@ -98,60 +93,24 @@ for epoch in range(epochs):
     # Tell torch not to calculate gradients
     with torch.no_grad():
         for inputs, labels in val_loader:
-            # Move to device
-            inputs, labels = inputs.to(device), labels.to(device)
-            # Forward pass
-            output = model.forward(inputs)
-            # Calculate Loss
-            valloss = criterion(output, labels)
-            # Add loss to the validation set's running loss
-            val_loss += valloss.item() * inputs.size(0)
-
-            # Since our model outputs a LogSoftmax, find the real
-            # percentages by reversing the log function
+            inputs, labels = inputs.to(device), labels.to(device)  # Move to device
+            output = model.forward(inputs)  # Forward pass
+            valloss = criterion(output, labels)  # Calculate Loss
+            val_loss += valloss.item() * inputs.size(0)  # Add loss to the validation set's running loss
+            # Since our model outputs a LogSoftmax, find the real  percentages by reversing the log function
             output = torch.exp(output)
-            # Get the top class of the output
-            top_p, top_class = output.topk(1, dim=1)
-            # See how many of the classes were correct?
-            equals = top_class == labels.view(*top_class.shape)
+            top_p, top_class = output.topk(1, dim=1)  # Get the top class of the output
+            equals = top_class == labels.view(*top_class.shape)  # See how many of the classes were correct?
             # Calculate the mean (get the accuracy for this batch)
             # and add it to the running accuracy for this epoch
             accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
 
-            # Print the progress of our evaluation
-            counter += 1
-
     # Get the average loss for the entire epoch
+    # TODO - study mae
     train_loss = train_loss / len(train_loader.dataset)
     valid_loss = val_loss / len(val_loader.dataset)
+    tb_writer.add_scalar("train_loss", train_loss, epoch)
+    tb_writer.add_scalar("valid_loss", valid_loss, epoch)
     # Print out the information
     print('Accuracy: ', accuracy / len(val_loader))
     print('Epoch: {} \tTraining Loss: {:.6f} \tValidation Loss: {:.6f}'.format(epoch, train_loss, valid_loss))
-
-
-# %%
-
-
-def image_loader(image_name):
-    """load image, returns cuda tensor"""
-    image = Image.open(image_name)
-    image = transformationsV(image).float()
-    image = Variable(image, requires_grad=True)
-    return image.cuda()  # assumes that you're using GPU
-
-
-image = image_loader("images/validation/active/20200710_003825.819551.jpg")
-image = image[np.newaxis, :]
-predit = model(image)
-print(predit)
-
-torch.onnx.export(model,  # model being run
-                  image,  # model input (or a tuple for multiple inputs)
-                  "skill.onnx",  # where to save the model (can be a file or file-like object)
-                  export_params=True,  # store the trained parameter weights inside the model file
-                  opset_version=10,  # the ONNX version to export the model to
-                  do_constant_folding=True,  # whether to execute constant folding for optimization
-                  input_names=['input'],  # the model's input names
-                  output_names=['output'],  # the model's output names
-                  dynamic_axes={'input': {0: 'batch_size'},  # variable lenght axes
-                                'output': {0: 'batch_size'}})
