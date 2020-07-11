@@ -67,18 +67,20 @@ model.to(device)
 summary(model, (3, 56, 56))
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters())
+optimizer = optim.Adam(model.parameters(), weight_decay=1e-5)
 
 # Find the device available to use using torch library
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Move model to the device specified above
 model.to(device)
 
+scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
 
 for epoch in range(epochs):
     train_loss = 0
     val_loss = 0
     accuracy = 0
+    scheduler.step()
 
     # Training the model
     model.train()
@@ -120,7 +122,7 @@ for epoch in range(epochs):
     tb_writer.add_scalar("valid_loss", valid_loss, epoch)
     tb_writer.add_scalar("accuracy", accu, epoch)
     # Print out the information
-    print('Accuracy: ', accu)
+    print('Accuracy: ', accu, ':', scheduler.get_lr()[0])
     print('Epoch: {} \tTraining Loss: {:.6f} \tValidation Loss: {:.6f}'.format(epoch, train_loss, valid_loss))
 
 

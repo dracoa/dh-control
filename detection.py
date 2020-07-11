@@ -12,7 +12,8 @@ def is_ready(img):
     result = is_ready_np(img)
     x = result[0][0]
     smax = np.exp(x) / sum(np.exp(x))
-    return label[np.argmax(smax)]
+    print(smax, np.argmax(smax))
+    return np.argmax(smax) == 2
 
 
 def is_ready_np(img):
@@ -27,9 +28,3 @@ def is_ready_np(img):
     img = np.expand_dims(img, axis=0)
     return ort_session.run(None, {ort_session.get_inputs()[0].name: img})
 
-
-for dirPath, dirNames, fileNames in os.walk("images/validation/ready/"):
-    for f in fileNames:
-        image = Image.open(os.path.join(dirPath, f))
-        if is_ready(image) != 'ready':
-            print(os.path.join(dirPath, f))
