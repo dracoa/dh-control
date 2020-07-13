@@ -20,7 +20,7 @@ skills = [
     {"name": "s2", "trigger": -1, "action": "2", "x": 698, "y": y},
     {"name": "s3", "trigger": -1, "action": "3", "x": 764, "y": y},
     {"name": "s4", "trigger": -1, "action": "4", "x": 831, "y": y},
-    {"name": "s5", "trigger": 1.5, "action": Button.left, "x": 900, "y": y},
+    {"name": "s5", "trigger": 1, "action": Button.left, "x": 900, "y": y},
     {"name": "s6", "trigger": 0, "action": Button.right, "x": 966, "y": y},
 ]
 mouse_ctrl = MouseController()
