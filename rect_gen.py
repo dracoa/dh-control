@@ -3,7 +3,6 @@ import numpy as np
 from random import randrange
 
 
-
 def generate():
     size = (64, 64, 3)
     color = (255, 255, 255)
@@ -22,7 +21,7 @@ def generate():
 
 
 i = 0
-while i < 256:
+while i < 1024:
     img, cord = generate()
     file = "rect/train/images/{0}.jpg".format(i)
     cv2.imwrite(file, img)
