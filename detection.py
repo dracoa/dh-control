@@ -12,7 +12,6 @@ def is_ready(img):
     result = is_ready_np(img)
     x = result[0][0]
     smax = np.exp(x) / sum(np.exp(x))
-    print(smax, np.argmax(smax))
     return np.argmax(smax) == 2
 
 

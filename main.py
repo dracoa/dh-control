@@ -33,12 +33,10 @@ def on_click(x, y, button, pressed):
         active = pressed
         if active:
             last = time.time()
-        print(active, last)
 
 
 def fire(skill):
     action = skill["action"]
-    print('fire {0}'.format(action))
     if type(action) is str:
         keyboard_ctrl.type(action)
     else:
@@ -109,6 +107,7 @@ def capture():
 def main():
     th = threading.Thread(target=loop)
     th.start()
+    print("detection start")
     with mouse.Listener(on_click=on_click) as listener:
         listener.join()
 
