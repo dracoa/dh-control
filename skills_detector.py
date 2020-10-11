@@ -6,7 +6,7 @@ from PIL import Image
 from utils.general import detect_onnx
 
 bar_session = onnxruntime.InferenceSession('./onnx/bar.onnx')
-skill_session = onnxruntime.InferenceSession('./onnx/best.onnx')
+skill_session = onnxruntime.InferenceSession('./onnx/skill_loc.onnx')
 class_session = onnxruntime.InferenceSession('./onnx/fire_six.onnx')
 climg_size_w = class_session.get_inputs()[0].shape[2]
 climg_size_h = class_session.get_inputs()[0].shape[3]

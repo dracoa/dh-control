@@ -14,16 +14,16 @@ def scale_coords(img1_shape, coords, img0_shape, ratio_pad=None):
     coords[:, [0, 2]] -= pad[0]  # x padding
     coords[:, [1, 3]] -= pad[1]  # y padding
     coords[:, :4] /= gain
+
+    def clip_coords(boxes, img_shape):
+        # Clip bounding xyxy bounding boxes to image shape (height, width)
+        boxes[:, 0].clip(0, img_shape[1])  # x1
+        boxes[:, 1].clip(0, img_shape[0])  # y1
+        boxes[:, 2].clip(0, img_shape[1])  # x2
+        boxes[:, 3].clip(0, img_shape[0])  # y2
+
     clip_coords(coords, img0_shape)
     return coords
-
-
-def clip_coords(boxes, img_shape):
-    # Clip bounding xyxy bounding boxes to image shape (height, width)
-    boxes[:, 0].clip(0, img_shape[1])  # x1
-    boxes[:, 1].clip(0, img_shape[0])  # y1
-    boxes[:, 2].clip(0, img_shape[1])  # x2
-    boxes[:, 3].clip(0, img_shape[0])  # y2
 
 
 def xywh2xyxy(x):
