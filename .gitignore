@@ -3,3 +3,5 @@
 /run/
 /dist/
 /build/
+/onnx/
+/capture/images/

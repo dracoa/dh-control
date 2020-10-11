@@ -14,14 +14,16 @@ last = time.time()
 delay = 0.5
 monitor_number = 1
 width, height = 56, 56
-y = 1001
+x = 786
+y = 1304
+
 skills = [
-    {"name": "s1", "trigger": -1, "action": "1", "x": 631, "y": y},
-    {"name": "s2", "trigger": -1, "action": "2", "x": 698, "y": y},
-    {"name": "s3", "trigger": -1, "action": "3", "x": 764, "y": y},
-    {"name": "s4", "trigger": -1, "action": "4", "x": 831, "y": y},
-    {"name": "s5", "trigger": 1, "action": Button.left, "x": 900, "y": y},
-    {"name": "s6", "trigger": 0, "action": Button.right, "x": 966, "y": y},
+    {"name": "s1", "trigger": -1, "action": "1"},
+    {"name": "s2", "trigger": -1, "action": "2"},
+    {"name": "s3", "trigger": -1, "action": "3"},
+    {"name": "s4", "trigger": -1, "action": "4"},
+    {"name": "s5", "trigger": 1, "action": Button.left},
+    {"name": "s6", "trigger": 0, "action": Button.right},
 ]
 mouse_ctrl = MouseController()
 keyboard_ctrl = KeyboardController()
@@ -82,6 +84,25 @@ def loop():
                             fire_when_ready(raw, skill)
 
 
+def check_skill_pos():
+    with mss.mss() as sct:
+        mon = sct.monitors[monitor_number]
+        monitor = {
+            "top": mon["top"],  # 100px from the top
+            "left": mon["left"],  # 100px from the left
+            "width": mon["width"],
+            "height": mon["height"],
+            "mon": monitor_number,
+        }
+        sct_img = sct.grab(monitor)
+        raw = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+        for skill in skills:
+            box = (skill["x"], skill["y"], skill["x"] + width, skill["y"] + height)
+            simg = raw.crop(box)
+            simg.save("{0}.jpg".format(skill["name"]))
+        time.sleep(5)
+
+
 def capture():
     global active
     with mss.mss() as sct:
@@ -116,3 +137,5 @@ if __name__ == "__main__":
     for s in skills:
         s["last_fire"] = time.time()
     main()
+    # while True:
+    #     check_skill_pos()
