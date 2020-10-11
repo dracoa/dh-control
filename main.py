@@ -7,8 +7,6 @@ from PIL import Image
 import time
 from detection import is_ready
 from pynput.keyboard import Key, Controller as KeyboardController
-from datetime import datetime
-import numpy as np
 
 from skills_detector import detect_skill_loc, classify_skills
 

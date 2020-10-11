@@ -1,41 +1,7 @@
-import time
-import numpy as np
 import torch
+import numpy as np
+import onnxruntime
 from PIL import Image
-from torchvision.ops import nms
-
-
-def letterbox_image(image, size):
-    iw, ih = image.size
-    w, h = size
-    scale = min(w / iw, h / ih)
-    nw = int(iw * scale)
-    nh = int(ih * scale)
-
-    image = image.resize((nw, nh), Image.BICUBIC)
-    new_image = Image.new('RGB', size, (128, 128, 128))
-    new_image.paste(image, ((w - nw) // 2, (h - nh) // 2))
-    return new_image
-
-
-def xyxy2xywh(x):
-    # Convert nx4 boxes from [x1, y1, x2, y2] to [x, y, w, h] where xy1=top-left, xy2=bottom-right
-    y = torch.zeros_like(x) if isinstance(x, torch.Tensor) else np.zeros_like(x)
-    y[:, 0] = (x[:, 0] + x[:, 2]) / 2  # x center
-    y[:, 1] = (x[:, 1] + x[:, 3]) / 2  # y center
-    y[:, 2] = x[:, 2] - x[:, 0]  # width
-    y[:, 3] = x[:, 3] - x[:, 1]  # height
-    return y
-
-
-def xywh2xyxy(x):
-    # Convert nx4 boxes from [x, y, w, h] to [x1, y1, x2, y2] where xy1=top-left, xy2=bottom-right
-    y = torch.zeros_like(x) if isinstance(x, torch.Tensor) else np.zeros_like(x)
-    y[:, 0] = x[:, 0] - x[:, 2] / 2  # top left x
-    y[:, 1] = x[:, 1] - x[:, 3] / 2  # top left y
-    y[:, 2] = x[:, 0] + x[:, 2] / 2  # bottom right x
-    y[:, 3] = x[:, 1] + x[:, 3] / 2  # bottom right y
-    return y
 
 
 def scale_coords(img1_shape, coords, img0_shape, ratio_pad=None):
@@ -56,114 +22,131 @@ def scale_coords(img1_shape, coords, img0_shape, ratio_pad=None):
 
 def clip_coords(boxes, img_shape):
     # Clip bounding xyxy bounding boxes to image shape (height, width)
-    boxes[:, 0].clamp_(0, img_shape[1])  # x1
-    boxes[:, 1].clamp_(0, img_shape[0])  # y1
-    boxes[:, 2].clamp_(0, img_shape[1])  # x2
-    boxes[:, 3].clamp_(0, img_shape[0])  # y2
+    boxes[:, 0].clip(0, img_shape[1])  # x1
+    boxes[:, 1].clip(0, img_shape[0])  # y1
+    boxes[:, 2].clip(0, img_shape[1])  # x2
+    boxes[:, 3].clip(0, img_shape[0])  # y2
 
 
-def non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, merge=False, classes=None, agnostic=False):
-    """Performs Non-Maximum Suppression (NMS) on inference results
+def xywh2xyxy(x):
+    y = np.zeros_like(x)
+    y[:, 0] = x[:, 0] - x[:, 2] / 2  # top left x
+    y[:, 1] = x[:, 1] - x[:, 3] / 2  # top left y
+    y[:, 2] = x[:, 0] + x[:, 2] / 2  # bottom right x
+    y[:, 3] = x[:, 1] + x[:, 3] / 2  # bottom right y
+    return y
 
-    Returns:
-         detections with shape: nx6 (x1, y1, x2, y2, conf, cls)
+
+def letterbox_image(image, size):
+    iw, ih = image.size
+    w, h = size
+    scale = min(w / iw, h / ih)
+    nw = int(iw * scale)
+    nh = int(ih * scale)
+
+    image = image.resize((nw, nh), Image.BICUBIC)
+    new_image = Image.new('RGB', size, (128, 128, 128))
+    new_image.paste(image, ((w - nw) // 2, (h - nh) // 2))
+    return new_image
+
+
+def bboxes_iou(boxes1, boxes2):
+    '''calculate the Intersection Over Union value'''
+    boxes1 = np.array(boxes1)
+    boxes2 = np.array(boxes2)
+
+    boxes1_area = (boxes1[..., 2] - boxes1[..., 0]) * (boxes1[..., 3] - boxes1[..., 1])
+    boxes2_area = (boxes2[..., 2] - boxes2[..., 0]) * (boxes2[..., 3] - boxes2[..., 1])
+
+    left_up = np.maximum(boxes1[..., :2], boxes2[..., :2])
+    right_down = np.minimum(boxes1[..., 2:], boxes2[..., 2:])
+
+    inter_section = np.maximum(right_down - left_up, 0.0)
+    inter_area = inter_section[..., 0] * inter_section[..., 1]
+    union_area = boxes1_area + boxes2_area - inter_area
+    ious = np.maximum(1.0 * inter_area / union_area, np.finfo(np.float32).eps)
+
+    return ious
+
+
+def nms(bboxes, iou_threshold, sigma=0.3, method='nms'):
     """
-    nc = prediction[0].shape[1] - 5  # number of classes
+    :param bboxes: (xmin, ymin, xmax, ymax, score, class)
 
-    xc = prediction[..., 4] > conf_thres  # candidates
-
-    # Settings
-    min_wh, max_wh = 2, 4096  # (pixels) minimum and maximum box width and height
-    max_det = 300  # maximum number of detections per image
-    time_limit = 10.0  # seconds to quit after
-    redundant = True  # require redundant detections
-    multi_label = nc > 1  # multiple labels per box (adds 0.5ms/img)
-
-    t = time.time()
-    output = [None] * prediction.shape[0]
-    for xi, x in enumerate(prediction):  # image index, image inference
-        # Apply constraints
-        # x[((x[..., 2:4] < min_wh) | (x[..., 2:4] > max_wh)).any(1), 4] = 0  # width-height
-        x = x[xc[xi]]  # confidence
-
-        # If none remain process next image
-        if not x.shape[0]:
-            continue
-
-        # Compute conf
-        x[:, 5:] *= x[:, 4:5]  # conf = obj_conf * cls_conf
-
-        # Box (center x, center y, width, height) to (x1, y1, x2, y2)
-        box = xywh2xyxy(x[:, :4])
-
-        # Detections matrix nx6 (xyxy, conf, cls)
-        if multi_label:
-            i, j = (x[:, 5:] > conf_thres).nonzero(as_tuple=False).T
-            x = torch.cat((box[i], x[i, j + 5, None], j[:, None].float()), 1)
-        else:  # best class only
-            conf, j = x[:, 5:].max(1, keepdim=True)
-            x = torch.cat((box, conf, j.float()), 1)[conf.view(-1) > conf_thres]
-
-        # Filter by class
-        if classes:
-            x = x[(x[:, 5:6] == torch.tensor(classes, device=x.device)).any(1)]
-
-        # Apply finite constraint
-        # if not torch.isfinite(x).all():
-        #     x = x[torch.isfinite(x).all(1)]
-
-        # If none remain process next image
-        n = x.shape[0]  # number of boxes
-        if not n:
-            continue
-
-        # Sort by confidence
-        # x = x[x[:, 4].argsort(descending=True)]
-
-        # Batched NMS
-        c = x[:, 5:6] * (0 if agnostic else max_wh)  # classes
-        boxes, scores = x[:, :4] + c, x[:, 4]  # boxes (offset by class), scores
-        i = nms(boxes, scores, iou_thres)
-        if i.shape[0] > max_det:  # limit detections
-            i = i[:max_det]
-        if merge and (1 < n < 3E3):  # Merge NMS (boxes merged using weighted mean)
-            try:  # update boxes as boxes(i,4) = weights(i,n) * boxes(n,4)
-                iou = box_iou(boxes[i], boxes) > iou_thres  # iou matrix
-                weights = iou * scores[None]  # box weights
-                x[i, :4] = torch.mm(weights, x[:, :4]).float() / weights.sum(1, keepdim=True)  # merged boxes
-                if redundant:
-                    i = i[iou.sum(1) > 1]  # require redundancy
-            except:  # possible CUDA error https://github.com/ultralytics/yolov3/issues/1139
-                print(x, i, x.shape, i.shape)
-                pass
-
-        output[xi] = x[i]
-        if (time.time() - t) > time_limit:
-            break  # time limit exceeded
-
-    return output
-
-
-def box_iou(box1, box2):
-    # https://github.com/pytorch/vision/blob/master/torchvision/ops/boxes.py
-    """
-    Return intersection-over-union (Jaccard index) of boxes.
-    Both sets of boxes are expected to be in (x1, y1, x2, y2) format.
-    Arguments:
-        box1 (Tensor[N, 4])
-        box2 (Tensor[M, 4])
-    Returns:
-        iou (Tensor[N, M]): the NxM matrix containing the pairwise
-            IoU values for every element in boxes1 and boxes2
+    Note: soft-nms, https://arxiv.org/pdf/1704.04503.pdf
+          https://github.com/bharatsingh430/soft-nms
     """
 
-    def box_area(box):
-        # box = 4xn
-        return (box[2] - box[0]) * (box[3] - box[1])
+    classes_in_img = list(set(bboxes[:, 5]))
+    best_bboxes = []
 
-    area1 = box_area(box1.T)
-    area2 = box_area(box2.T)
+    for cls in classes_in_img:
+        cls_mask = (bboxes[:, 5] == cls)
+        cls_bboxes = bboxes[cls_mask]
 
-    # inter(N,M) = (rb(N,M,2) - lt(N,M,2)).clamp(0).prod(2)
-    inter = (torch.min(box1[:, None, 2:], box2[:, 2:]) - torch.max(box1[:, None, :2], box2[:, :2])).clamp(0).prod(2)
-    return inter / (area1[:, None] + area2 - inter)  # iou = inter / (area1 + area2 - inter)
+        while len(cls_bboxes) > 0:
+            max_ind = np.argmax(cls_bboxes[:, 4])
+            best_bbox = cls_bboxes[max_ind]
+            best_bboxes.append(best_bbox)
+            cls_bboxes = np.concatenate([cls_bboxes[: max_ind], cls_bboxes[max_ind + 1:]])
+            iou = bboxes_iou(best_bbox[np.newaxis, :4], cls_bboxes[:, :4])
+            weight = np.ones((len(iou),), dtype=np.float32)
+
+            assert method in ['nms', 'soft-nms']
+
+            if method == 'nms':
+                iou_mask = iou > iou_threshold
+                weight[iou_mask] = 0.0
+
+            if method == 'soft-nms':
+                weight = np.exp(-(1.0 * iou ** 2 / sigma))
+
+            cls_bboxes[:, 4] = cls_bboxes[:, 4] * weight
+            score_mask = cls_bboxes[:, 4] > 0.
+            cls_bboxes = cls_bboxes[score_mask]
+
+    return best_bboxes
+
+
+def detect_onnx(image_src, session):
+    img_size_w = session.get_inputs()[0].shape[2]
+    img_size_h = session.get_inputs()[0].shape[3]
+    w, h = image_src.size
+
+    resized = letterbox_image(image_src, (img_size_w, img_size_h))
+    img_in = np.transpose(resized, (2, 0, 1)).astype(np.float32)  # HWC -> CHW
+    img_in = np.expand_dims(img_in, axis=0)
+    img_in /= 255.0
+    print("Shape of the image input shape: ", img_in.shape)
+
+    # inference
+    input_name = session.get_inputs()[0].name
+    outputs = session.run(None, {input_name: img_in})
+
+    prediction = outputs[0]
+    batch_detections = []
+    # (1, 25200, 6)
+    # [ box_center_x_offset, box_center_y_offset, box_width, box_height, obj_score, class_prob ...  ]
+    xc = prediction[..., 4] > 0.9  # candidates   (1, 25200) obj_score > conf
+    for xi, x in enumerate(prediction):
+        x = x[xc[xi]]  # filter out all box with conf < thresold
+        x[:, 5:] *= x[:, 4:5]  # multipy class prob with obj prob ( 0.9 , 0.5, 0.1) => (0.9, 0.45, 0.09)
+        boxs = xywh2xyxy(x[:, :4])
+        score = x[:, 5:]
+        cls = np.expand_dims(x[:, 5:].argmax(1), axis=1)
+        boxes = np.concatenate((boxs, score, cls), axis=1)
+        nms_result = np.array(nms(boxes, iou_threshold=0.9))
+        boxs = nms_result[..., :4]
+        confs = nms_result[..., 4:]
+        boxs[:, :] = scale_coords((img_size_w, img_size_h), boxs[:, :], (h, w)).round()
+        batch_detections.append(np.append(boxs, confs.reshape(-1, 2), axis=1))
+
+    return batch_detections
+
+
+if __name__ == '__main__':
+    image_path = './inference/images/5.jpg'
+    with torch.no_grad():
+        detections = detect_onnx(image_path=image_path)
+        for dect in detections:
+            print(dect)
