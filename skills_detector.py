@@ -1,3 +1,4 @@
+import mss
 import torch
 import numpy as np
 import onnxruntime
@@ -5,7 +6,7 @@ from PIL import Image
 from utils.general import non_max_suppression, letterbox_image, scale_coords
 
 bar_session = onnxruntime.InferenceSession('./onnx/bar.onnx')
-skill_session = onnxruntime.InferenceSession('./onnx/skill.onnx')
+skill_session = onnxruntime.InferenceSession('./onnx/best.onnx')
 class_session = onnxruntime.InferenceSession('./onnx/fire_six.onnx')
 climg_size_w = class_session.get_inputs()[0].shape[2]
 climg_size_h = class_session.get_inputs()[0].shape[3]
@@ -54,12 +55,11 @@ def detect_skill_loc(image_src):
         for i in range(len(skill_result)):
             sx1, sy1, sx2, sy2, _ = skill_result[i]
             w, h = (sx2 - sx1, sy2 - sy1)
-            if w / h < 1.1:
-                coord = [sx1 + x1, sy1 + y1, sx2 + x1, sy2 + y1]
-                skills.append(coord)
-                image_src.crop(coord).save('./outputs/skill_{}.jpg'.format(idx))
-                print(idx, w, h, w / h)
-                idx += 1
+            coord = [sx1 + x1, sy1 + y1, sx2 + x1, sy2 + y1]
+            skills.append(coord)
+            image_src.crop(coord).save('./outputs/skill_{}.jpg'.format(idx))
+            print(idx, w, h, w / h)
+            idx += 1
         return skills
 
 
@@ -78,6 +78,17 @@ def classify_skills(skills):
 
 
 if __name__ == "__main__":
-    img = Image.open('./images/4.jpg')
-    skills = detect_skill_loc(img)
-    print(skills)
+    with mss.mss() as sct:
+        mon = sct.monitors[1]
+        monitor = {
+            "top": mon["top"],  # 100px from the top
+            "left": mon["left"],  # 100px from the left
+            "width": mon["width"],
+            "height": mon["height"],
+            "mon": 1,
+        }
+        sct_img = sct.grab(monitor)
+        raw = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+        # img = Image.open('./images/4.jpg')
+        skills = detect_skill_loc(raw)
+        print(skills)

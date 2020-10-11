@@ -19,7 +19,6 @@ monitor_number = 1
 width, height = 56, 56
 x = 786
 y = 1304
-
 skills = [
     {"name": "s1", "trigger": -1, "action": "1"},
     {"name": "s2", "trigger": -1, "action": "2"},
@@ -29,6 +28,7 @@ skills = [
     {"name": "s6", "trigger": 0, "action": Button.right},
 ]
 skill_loc = []
+
 mouse_ctrl = MouseController()
 keyboard_ctrl = KeyboardController()
 
@@ -66,7 +66,7 @@ def fire_when_ready(raw, skill):
 
 
 def loop():
-    global active
+    global active, skill_loc
     with mss.mss() as sct:
         mon = sct.monitors[monitor_number]
         monitor = {
@@ -78,6 +78,12 @@ def loop():
         }
         while True:
             if active and time.time() - last > delay:
+                if len(skill_loc) < 6:
+                    print('detect skills location')
+                    sct_img = sct.grab(monitor)
+                    raw = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+                    skill_loc = detect_skill_loc(raw)
+
                 sct_img = sct.grab(monitor)
                 raw = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
 
@@ -100,24 +106,11 @@ def main():
     th = threading.Thread(target=loop)
     th.start()
     print("detection start")
-    print(skills)
     with mouse.Listener(on_click=on_click) as listener:
         listener.join()
 
 
 if __name__ == "__main__":
-    with mss.mss() as sct:
-        mon = sct.monitors[monitor_number]
-        monitor = {
-            "top": mon["top"],  # 100px from the top
-            "left": mon["left"],  # 100px from the left
-            "width": mon["width"],
-            "height": mon["height"],
-            "mon": monitor_number,
-        }
-        sct_img = sct.grab(monitor)
-        raw = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-        skill_loc = detect_skill_loc(raw)
-        for i in range(len(skills)):
-            skills[i]["last_fire"] = time.time()
+    for i in range(len(skills)):
+        skills[i]["last_fire"] = time.time()
     main()
