@@ -8,6 +8,9 @@ import time
 from detection import is_ready
 from pynput.keyboard import Key, Controller as KeyboardController
 from datetime import datetime
+import numpy as np
+
+from skills_detector import detect_skill_loc, classify_skills
 
 active = False
 last = time.time()
@@ -25,6 +28,7 @@ skills = [
     {"name": "s5", "trigger": 1, "action": Button.left},
     {"name": "s6", "trigger": 0, "action": Button.right},
 ]
+skill_loc = []
 mouse_ctrl = MouseController()
 keyboard_ctrl = KeyboardController()
 
@@ -76,15 +80,32 @@ def loop():
             if active and time.time() - last > delay:
                 sct_img = sct.grab(monitor)
                 raw = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-                for skill in skills:
+
+                skill_images = []
+                for loc in skill_loc:
+                    skill_images.append(raw.crop(loc))
+
+                skill_state = classify_skills(skill_images)
+                print(skill_state)
+                for i in range(len(skills)):
+                    skill = skills[i]
                     if skill["trigger"] != 0:
                         if skill["trigger"] > 0:
                             fire_at_interval(skill)
-                        else:
-                            fire_when_ready(raw, skill)
+                        elif skill_state[i] == 0:
+                            fire(skill)
 
 
-def check_skill_pos():
+def main():
+    th = threading.Thread(target=loop)
+    th.start()
+    print("detection start")
+    print(skills)
+    with mouse.Listener(on_click=on_click) as listener:
+        listener.join()
+
+
+if __name__ == "__main__":
     with mss.mss() as sct:
         mon = sct.monitors[monitor_number]
         monitor = {
@@ -96,46 +117,7 @@ def check_skill_pos():
         }
         sct_img = sct.grab(monitor)
         raw = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-        for skill in skills:
-            box = (skill["x"], skill["y"], skill["x"] + width, skill["y"] + height)
-            simg = raw.crop(box)
-            simg.save("{0}.jpg".format(skill["name"]))
-        time.sleep(5)
-
-
-def capture():
-    global active
-    with mss.mss() as sct:
-        mon = sct.monitors[monitor_number]
-        monitor = {
-            "top": mon["top"],  # 100px from the top
-            "left": mon["left"],  # 100px from the left
-            "width": mon["width"],
-            "height": mon["height"],
-            "mon": monitor_number,
-        }
-        skill = skills[0]
-        box = (skill["x"], skill["y"], skill["x"] + width, skill["y"] + height)
-        while True:
-            if active:
-                sct_img = sct.grab(monitor)
-                raw = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-                simg = raw.crop(box)
-                simg.save('images/temp/{0}.jpg'.format(datetime.now().strftime("%Y%m%d_%H%M%S.%f")))
-                time.sleep(0.1)
-
-
-def main():
-    th = threading.Thread(target=loop)
-    th.start()
-    print("detection start")
-    with mouse.Listener(on_click=on_click) as listener:
-        listener.join()
-
-
-if __name__ == "__main__":
-    for s in skills:
-        s["last_fire"] = time.time()
+        skill_loc = detect_skill_loc(raw)
+        for i in range(len(skills)):
+            skills[i]["last_fire"] = time.time()
     main()
-    # while True:
-    #     check_skill_pos()
