@@ -1,6 +1,4 @@
-import torch
 import numpy as np
-import onnxruntime
 from PIL import Image
 
 
@@ -146,7 +144,6 @@ def detect_onnx(image_src, session):
 
 if __name__ == '__main__':
     image_path = './inference/images/5.jpg'
-    with torch.no_grad():
-        detections = detect_onnx(image_path=image_path)
-        for dect in detections:
-            print(dect)
+    detections = detect_onnx(image_path=image_path)
+    for dect in detections:
+        print(dect)

@@ -5,7 +5,6 @@ import mss
 import mss.tools
 from PIL import Image
 import time
-from detection import is_ready
 from pynput.keyboard import Key, Controller as KeyboardController
 
 from skills_detector import detect_skill_loc, classify_skills
@@ -14,9 +13,6 @@ active = False
 last = time.time()
 delay = 0.5
 monitor_number = 1
-width, height = 56, 56
-x = 786
-y = 1304
 skills = [
     {"name": "s1", "trigger": -1, "action": "1"},
     {"name": "s2", "trigger": -1, "action": "2"},
@@ -56,13 +52,6 @@ def fire_at_interval(skill):
         fire(skill)
 
 
-def fire_when_ready(raw, skill):
-    box = (skill["x"], skill["y"], skill["x"] + width, skill["y"] + height)
-    simg = raw.crop(box)
-    if is_ready(simg):
-        fire(skill)
-
-
 def loop():
     global active, skill_loc
     with mss.mss() as sct:
@@ -88,9 +77,9 @@ def loop():
                 skill_images = []
                 for loc in skill_loc:
                     skill_images.append(raw.crop(loc))
-
+                t = time.time()
                 skill_state = classify_skills(skill_images)
-                print(skill_state)
+                print(skill_state, time.time() - t)
                 for i in range(len(skills)):
                     skill = skills[i]
                     if skill["trigger"] != 0:
