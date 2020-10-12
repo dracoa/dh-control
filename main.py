@@ -1,3 +1,4 @@
+import argparse
 from pynput import mouse
 from pynput.mouse import Button, Controller as MouseController
 import threading
@@ -69,6 +70,7 @@ def loop():
                     print('detect skills location')
                     sct_img = sct.grab(monitor)
                     raw = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+                    raw.save('./outputs/raw.jpg')
                     skill_loc = detect_skill_loc(raw)
 
                 sct_img = sct.grab(monitor)
@@ -92,12 +94,16 @@ def loop():
 def main():
     th = threading.Thread(target=loop)
     th.start()
-    print("detection start")
+    print('capture on mon: ', monitor_number)
     with mouse.Listener(on_click=on_click) as listener:
         listener.join()
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--monitor', type=int, default=1, help='screen id')
+    opt = parser.parse_args()
+    monitor_number = opt.monitor
     for i in range(len(skills)):
         skills[i]["last_fire"] = time.time()
     main()

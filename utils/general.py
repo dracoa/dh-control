@@ -134,10 +134,12 @@ def detect_onnx(image_src, session):
         cls = np.expand_dims(x[:, 5:].argmax(1), axis=1)
         boxes = np.concatenate((boxs, score, cls), axis=1)
         nms_result = np.array(nms(boxes, iou_threshold=0.9))
-        boxs = nms_result[..., :4]
-        confs = nms_result[..., 4:]
-        boxs[:, :] = scale_coords((img_size_w, img_size_h), boxs[:, :], (h, w)).round()
-        batch_detections.append(np.append(boxs, confs.reshape(-1, 2), axis=1))
+        print(nms_result)
+        if len(nms_result) > 0:
+            boxs = nms_result[..., :4]
+            confs = nms_result[..., 4:]
+            boxs[:, :] = scale_coords((img_size_w, img_size_h), boxs[:, :], (h, w)).round()
+            batch_detections.append(np.append(boxs, confs.reshape(-1, 2), axis=1))
 
     return batch_detections
 
